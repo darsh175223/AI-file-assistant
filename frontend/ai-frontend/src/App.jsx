@@ -92,6 +92,109 @@ function FractalCluster({ compact = false }) {
   )
 }
 
+function UploadWidget() {
+  const [files, setFiles] = useState([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [status, setStatus] = useState({
+    type: 'idle',
+    message: 'Select files, then press upload.',
+  })
+
+  const handleFileChange = (event) => {
+    const selectedFiles = Array.from(event.target.files || [])
+    setFiles(selectedFiles)
+    setStatus({
+      type: 'idle',
+      message: selectedFiles.length > 0 ? 'Files ready to upload.' : 'Select files, then press upload.',
+    })
+  }
+
+  const handleUpload = async () => {
+    if (files.length === 0) {
+      setStatus({
+        type: 'error',
+        message: 'Select at least one file first.',
+      })
+      return
+    }
+
+    const filePaths = files.map((file) => file.path || file.webkitRelativePath || file.name)
+
+    setIsUploading(true)
+    setStatus({
+      type: 'loading',
+      message: 'Uploading file list...',
+    })
+
+    try {
+      const response = await fetch('/embed-files', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          files: filePaths,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      const message =
+        payload.message ||
+        payload.error ||
+        `Processed ${filePaths.length} file${filePaths.length === 1 ? '' : 's'}.`
+
+      if (!response.ok) {
+        setStatus({ type: 'error', message })
+        return
+      }
+
+      setStatus({ type: 'success', message })
+    } catch {
+      setStatus({
+        type: 'error',
+        message: 'Could not reach the backend. Make sure the Flask server is running on port 5000.',
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  return (
+    <div className="upload-widget">
+      <label className="upload-dropzone">
+        <input type="file" multiple onChange={handleFileChange} className="upload-input" />
+        <span className="scan-label">Files</span>
+        <h2>Select one or more files.</h2>
+      </label>
+
+      <div className="upload-preview">
+        {files.length > 0 ? (
+          <ul className="upload-list">
+            {files.map((file) => (
+              <li key={`${file.name}-${file.lastModified}`} className="upload-list__item">
+                <span className="upload-list__name">{file.name}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        className="action-button upload-action"
+        onClick={handleUpload}
+        disabled={isUploading}
+      >
+        {isUploading ? 'UPLOADING' : 'UPLOAD'}
+      </button>
+
+      <p className={`upload-status upload-status--${status.type}`} role="status" aria-live="polite">
+        {status.message}
+      </p>
+    </div>
+  )
+}
+
 function LandingPage() {
   return (
     <div className="page page--landing">
@@ -279,6 +382,7 @@ function AppPage({ page }) {
 
       <section className="workspace-page">
         <h1>{appPageTitles[page]}</h1>
+        {page === 'upload' ? <UploadWidget /> : null}
       </section>
     </div>
   )

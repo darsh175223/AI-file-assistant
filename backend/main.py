@@ -3,6 +3,8 @@ import json
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from embedding import embed_and_store   # ← imports from embedding.py in same dir
+
 app = Flask(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'db.json')
@@ -55,6 +57,31 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
     
     return jsonify({"message": "Login successful"}), 200
+
+@app.route('/embed-files', methods=['POST'])
+def embed_files():
+    data = request.get_json()
+
+    if not data or 'files' not in data:
+        return jsonify({"error": "'files' field is required"}), 400
+
+    file_paths = data['files']
+
+    if not isinstance(file_paths, list) or len(file_paths) == 0:
+        return jsonify({"error": "'files' must be a non-empty list of file paths"}), 400
+
+    try:
+        embed_and_store(file_paths)
+        return jsonify({
+            "message": f"Successfully embedded and stored {len(file_paths)} file(s)",
+            "files": file_paths
+        }), 200
+
+    except FileNotFoundError as e:
+        return jsonify({"error": f"File not found: {str(e)}"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
