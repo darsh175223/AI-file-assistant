@@ -118,30 +118,28 @@ function UploadWidget() {
       return
     }
 
-    const filePaths = files.map((file) => file.path || file.webkitRelativePath || file.name)
-
     setIsUploading(true)
     setStatus({
       type: 'loading',
-      message: 'Uploading file list...',
+      message: 'Uploading files...',
     })
 
     try {
+      const formData = new FormData()
+      files.forEach((file) => {
+        formData.append('files', file)
+      })
+
       const response = await fetch('/embed-files', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          files: filePaths,
-        }),
+        body: formData,
       })
 
       const payload = await response.json().catch(() => ({}))
       const message =
         payload.message ||
         payload.error ||
-        `Processed ${filePaths.length} file${filePaths.length === 1 ? '' : 's'}.`
+        `Processed ${files.length} file${files.length === 1 ? '' : 's'}.`
 
       if (!response.ok) {
         setStatus({ type: 'error', message })
@@ -192,6 +190,120 @@ function UploadWidget() {
         {status.message}
       </p>
     </div>
+  )
+}
+
+function ManualWidget() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [status, setStatus] = useState({
+    type: 'idle',
+    message: 'Enter a search query and press enter.',
+  })
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    if (!query.trim()) {
+      setStatus({
+        type: 'error',
+        message: 'Enter a search query first.',
+      })
+      setResults([])
+      return
+    }
+
+    setIsSearching(true)
+    setStatus({
+      type: 'loading',
+      message: 'Searching...',
+    })
+
+    try {
+      const response = await fetch('/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: query.trim(),
+          n_results: 3,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      const message = payload.message || payload.error
+
+      if (!response.ok) {
+        setStatus({
+          type: 'error',
+          message: message || 'Search failed.',
+        })
+        setResults([])
+        return
+      }
+
+      const nextResults = Array.isArray(payload.results) ? payload.results : []
+      setResults(nextResults)
+      setStatus({
+        type: 'success',
+        message:
+          nextResults.length > 0
+            ? `Found ${nextResults.length} result${nextResults.length === 1 ? '' : 's'}.`
+            : 'No results found.',
+      })
+    } catch {
+      setStatus({
+        type: 'error',
+        message: 'Could not reach the backend. Make sure the Flask server is running on port 5000.',
+      })
+      setResults([])
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  return (
+    <form className="manual-widget" onSubmit={handleSubmit}>
+      <p className="manual-subtitle">Search for you files manually</p>
+
+      <div className="manual-controls">
+        <input
+          type="text"
+          className="manual-search"
+          placeholder="Search files"
+          aria-label="Search files manually"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <button type="submit" className="action-button manual-action" disabled={isSearching}>
+          {isSearching ? 'SEARCHING' : 'Enter'}
+        </button>
+      </div>
+
+      <p className={`manual-status manual-status--${status.type}`} role="status" aria-live="polite">
+        {status.message}
+      </p>
+
+      {results.length > 0 ? (
+        <div className="manual-results">
+          {results.map((result, index) => (
+            <article
+              key={`${result.filename || result.source || 'result'}-${index}`}
+              className="manual-result"
+            >
+              {result.filename ? <h2>{result.filename}</h2> : null}
+              {result.source ? <p className="manual-result__meta">{result.source}</p> : null}
+              {typeof result.distance === 'number' ? (
+                <p className="manual-result__meta">Distance: {result.distance.toFixed(4)}</p>
+              ) : null}
+              {result.text ? <p className="manual-result__text">{result.text}</p> : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </form>
   )
 }
 
@@ -383,6 +495,7 @@ function AppPage({ page }) {
       <section className="workspace-page">
         <h1>{appPageTitles[page]}</h1>
         {page === 'upload' ? <UploadWidget /> : null}
+        {page === 'manual' ? <ManualWidget /> : null}
       </section>
     </div>
   )
